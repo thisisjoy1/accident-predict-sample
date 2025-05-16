@@ -179,3 +179,73 @@ print('Score on train data = ', round(best_gs_knn.score(X_train, y_train), 4))
 print('Score on test data = ', round(best_gs_knn.score(X_test, y_test), 4))
 
 
+#deployment
+import gradio as gr
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import RobustScaler
+
+# Load and preprocess dataset (reuse your existing processing code here)
+# Ensure 'df', 'scaler', 'feature_names', 'numeric_columns', and 'best_gs_xgb' are available
+
+# Only keep what's needed to transform new input
+scaler = RobustScaler()
+X_scaled = X.copy()
+X_scaled[numeric_columns] = scaler.fit_transform(X[numeric_columns])
+
+# Define prediction function
+def predict_accident(Speed_Limit, Number_of_Vehicles, Traffic_Density, Driver_Alcohol,
+                     Weather, Road_Type, Time_of_Day, Accident_Severity, Road_Condition,
+                     Vehicle_Type, Road_Light_Condition, Driver_Age, Driver_Experience):
+    
+    Age_vs_Experience = Driver_Age - Driver_Experience
+
+    input_data = {
+        'Speed_Limit': Speed_Limit,
+        'Number_of_Vehicles': Number_of_Vehicles,
+        'Traffic_Density': Traffic_Density,
+        'Driver_Alcohol': Driver_Alcohol,
+        'Age_vs_Experience': Age_vs_Experience,
+        **{f"Weather_{Weather}": 1},
+        **{f"Road_Type_{Road_Type}": 1},
+        **{f"Time_of_Day_{Time_of_Day}": 1},
+        **{f"Accident_Severity_{Accident_Severity}": 1},
+        **{f"Road_Condition_{Road_Condition}": 1},
+        **{f"Vehicle_Type_{Vehicle_Type}": 1},
+        **{f"Road_Light_Condition_{Road_Light_Condition}": 1},
+    }
+
+    # Fill missing dummy vars with 0
+    for col in feature_names:
+        input_data.setdefault(col, 0)
+
+    input_df = pd.DataFrame([input_data])
+    input_df[numeric_columns] = scaler.transform(input_df[numeric_columns])
+    
+    prediction = best_gs_xgb.predict(input_df)[0]
+    return "Accident" if prediction == 1 else "No Accident"
+
+# Build the interface
+demo = gr.Interface(
+    fn=predict_accident,
+    inputs=[
+        gr.Number(label="Speed Limit"),
+        gr.Number(label="Number of Vehicles"),
+        gr.Number(label="Traffic Density"),
+        gr.Number(label="Driver Alcohol Level"),
+        gr.Dropdown(choices=df['Weather'].unique(), label="Weather"),
+        gr.Dropdown(choices=df['Road_Type'].unique(), label="Road Type"),
+        gr.Dropdown(choices=df['Time_of_Day'].unique(), label="Time of Day"),
+        gr.Dropdown(choices=df['Accident_Severity'].unique(), label="Accident Severity"),
+        gr.Dropdown(choices=df['Road_Condition'].unique(), label="Road Condition"),
+        gr.Dropdown(choices=df['Vehicle_Type'].unique(), label="Vehicle Type"),
+        gr.Dropdown(choices=df['Road_Light_Condition'].unique(), label="Road Light Condition"),
+        gr.Number(label="Driver Age"),
+        gr.Number(label="Driver Experience"),
+    ],
+    outputs="text",
+    title="Traffic Accident Prediction",
+    description="Predict whether an accident will occur based on input parameters."
+)
+
+demo.launch()
